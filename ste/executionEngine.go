@@ -99,7 +99,7 @@ func openFile(filePath string, flags int) *os.File {
 	return f
 }
 
-// maps a *os.File into memory and return a byte slice (mmap.MMap)
+// maps a *os.File into memory and return a byte slice (mmap.Map)
 func mapFile(file *os.File) mmap.MMap {
 	memoryMappedFile, err := mmap.Map(file, mmap.RDWR, 0)
 	if err != nil {
