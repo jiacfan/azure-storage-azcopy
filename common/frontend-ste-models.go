@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net"
 	"bytes"
+	"io/ioutil"
 )
 
 type JobID UUID
@@ -300,11 +301,11 @@ func NewHttpClient(url string) (*HTTPClient) {
 				urlString:url}
 }
 
-func (httpClient *HTTPClient) Send(commandType string, v interface{}) (resp *http.Response){
+func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
 	payload, err := json.Marshal(v)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("error marshalling the request payload for command type %d", commandType))
-		return
+		return []byte{}
 	}
 	req, err := http.NewRequest("POST", httpClient.urlString, bytes.NewBuffer(payload))
 
@@ -312,13 +313,22 @@ func (httpClient *HTTPClient) Send(commandType string, v interface{}) (resp *htt
 	q.Add("commandType", commandType)
 	req.URL.RawQuery = q.Encode()
 
-	resp, err = httpClient.client.Do(req)
+	resp, err := httpClient.client.Do(req)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("error sending the http request to url %s. Failed with error %s", httpClient.urlString, err.Error()))
-		return
+		return []byte{}
 	}
-	fmt.Println("response status code ", resp.StatusCode)
-	return
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		fmt.Println("error reading response for the request")
+		return []byte{}
+	}
+	if resp.StatusCode != http.StatusAccepted{
+		fmt.Println("request failed with status code %d and msg %s", resp.StatusCode, string(body))
+		return []byte{}
+	}
+	return body
 }
 
 const DefaultBlockSize = 100 * 1024 * 1024

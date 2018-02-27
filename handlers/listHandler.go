@@ -59,29 +59,20 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	url := "http://localhost:1337"
 	httpClient := common.NewHttpClient(url)
 
-	resp := httpClient.Send("list", listOrder)
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+	responseBytes := httpClient.Send("list", listOrder)
 
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
-		fmt.Println(errorMessage)
+	if len(responseBytes) == 0 {
 		return
-		//panic(errors.New(fmt.Sprintf("request failed with status %s", resp.Status)))
 	}
 
 	// list Order command requested the list of existing jobs
 	if commandLineInput.JobId == "" {
-		PrintExistingJobIds(body)
+		PrintExistingJobIds(responseBytes)
 	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
-		PrintJobProgressSummary(body, commandLineInput.JobId)
+		PrintJobProgressSummary(responseBytes, commandLineInput.JobId)
 	} else { //list Order command requested the list of specific transfer of an existing job
-		PrintJobTransfers(body, commandLineInput.JobId)
+		PrintJobTransfers(responseBytes, commandLineInput.JobId)
 	}
 }
 

@@ -3,8 +3,6 @@ package handlers
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"io/ioutil"
-	"net/http"
 )
 
 // handles the cancel command
@@ -22,16 +20,10 @@ func HandleCancelCommand(jobIdString string) {
 
 	httpClient := common.NewHttpClient(url)
 
-	resp := httpClient.Send("cancel", jobId)
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+	responseBytes := httpClient.Send("cancel", jobId)
+
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
-		fmt.Println(errorMessage)
+	if len(responseBytes) == 0 {
 		return
 	}
 	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", jobId))
@@ -51,21 +43,13 @@ func HandlePauseCommand(jobIdString string) {
 		return
 	}
 
-	resp := client.Send("resume", jobId)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+	responseBytes := client.Send("pause", jobId)
+
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
-		fmt.Println(errorMessage)
+	if len(responseBytes) == 0 {
 		return
 	}
+
 	fmt.Println(fmt.Sprintf("Job %s paused successfully", jobId))
 }
 
@@ -83,18 +67,12 @@ func HandleResumeCommand(jobIdString string) {
 		return
 	}
 
-	resp := client.Send("resume", jobId)
+	responseBytes := client.Send("resume", jobId)
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
-		fmt.Println(errorMessage)
+	if len(responseBytes) == 0 {
 		return
 	}
+
 	fmt.Println(fmt.Sprintf("Job %s resume successfully", jobId))
 }

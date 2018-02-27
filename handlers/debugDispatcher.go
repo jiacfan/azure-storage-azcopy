@@ -24,50 +24,27 @@ func sendJobPartOrderToSTE(payload *common.CopyJobPartOrder) {
 	url := "http://localhost:1337"
 	httpClient := common.NewHttpClient(url)
 
-	resp := httpClient.Send("copy", payload)
+	responseBytes := httpClient.Send("copy", payload)
 
-	defer resp.Body.Close()
-	_, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
+	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
+	if len(responseBytes) == 0 {
+		return
 	}
-	//fmt.Println("Response to request", res.Status, " ", body)
 }
 
 func fetchJobStatus(jobId string) string {
 	url := "http://localhost:1337"
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		panic(err)
-	}
+	client := common.NewHttpClient(url)
 
 	lsCommand := common.ListJobPartsTransfers{JobId: jobId, ExpectedTransferStatus: math.MaxUint8}
-	lsCommandMarshalled, err := json.Marshal(lsCommand)
-	if err != nil {
-		panic(err)
-	}
-	q := req.URL.Query()
-	q.Add("Type", "list")
-	q.Add("command", string(lsCommandMarshalled))
-	req.URL.RawQuery = q.Encode()
 
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	if resp.StatusCode != http.StatusAccepted {
-		fmt.Println("request failed with status ", resp.Status)
-		panic(err)
-	}
+	responseBytes := client.Send("list", lsCommand)
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
+	if len(responseBytes) == 0 {
+		return ""
 	}
 	var summary common.JobProgressSummary
-	json.Unmarshal(body, &summary)
+	json.Unmarshal(responseBytes, &summary)
 
 	tm.Clear()
 	tm.MoveCursor(1, 1)

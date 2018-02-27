@@ -588,66 +588,11 @@ func parseAndRouteHttpRequest(req *http.Request, coordinatorChannels *Coordinato
 func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfo, commonLogger *log.Logger) {
 	commonLogger.Println(fmt.Sprintf("http request recieved of type %s from %s for time %d", req.Method, req.RemoteAddr, time.Now().Second()))
 	switch req.Method {
-	case http.MethodGet:
-		// request type defines the type of GET request supported by transfer engine
-		// currently Transfer Engine is supporting list and kill type of GET request
-		// list type is used by the request for list commands
-		// kill type is used when frontend wants the existing instance of transfer engine to kill itself
-		var requestType = req.URL.Query()["Type"][0]
-		commonLogger.Println(fmt.Sprintf("type of http get request received by transfer engine %s", requestType))
-		switch requestType {
-		case "list":
-			var params = req.URL.Query()["command"][0]
-			listCommand := []byte(params)
-			var lsCommand common.ListJobPartsTransfers
-			err := json.Unmarshal(listCommand, &lsCommand)
-			if err != nil {
-				panic(err)
-			}
-			if lsCommand.JobId == "" {
-				commonLogger.Println("received request for listing existing jobs")
-				listExistingJobs(jobsInfoMap, commonLogger, resp)
-			} else {
-				jobId, err := common.ParseUUID(lsCommand.JobId)
-				if err != nil {
-					resp.Write([]byte("Invalid job id"))
-					resp.WriteHeader(http.StatusBadRequest)
-				}
-				if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
-					getJobSummary(common.JobID(jobId), jobsInfoMap, resp)
-				} else {
-					getTransferList(common.JobID(jobId), lsCommand.ExpectedTransferStatus, jobsInfoMap, resp)
-				}
-			}
-		case "cancel":
-			var jobIdStructString = req.URL.Query()["jobId"][0]
-			var uuid common.JobID
-			err := json.Unmarshal([]byte(jobIdStructString), &uuid)
-			if err != nil {
-				panic(err)
-			}
-			CancelJobOrder(common.JobID(uuid), jobsInfoMap, resp)
-		case "pause":
-			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.JobID
-			err := json.Unmarshal([]byte(jobIdString), &jobId)
-			if err != nil {
-				panic(err)
-			}
-			PauseJobOrder(common.JobID(jobId), jobsInfoMap, resp)
-		case "resume":
-			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.JobID
-			err := json.Unmarshal([]byte(jobIdString), &jobId)
-			if err != nil {
-				panic(err)
-			}
-			ResumeJobOrder(common.JobID(jobId), jobsInfoMap, coordinatorChannels, resp)
-		}
-
 	case http.MethodPost:
 		commonLogger.Println(fmt.Sprintf("http put request recieved of type %s from %s for time %s", req.Method, req.RemoteAddr, time.Now()))
 		parseAndRouteHttpRequest(req, coordinatorChannels, jobsInfoMap, commonLogger, resp)
+	case http.MethodGet:
+		fallthrough
 	case http.MethodPut:
 		fallthrough
 	case http.MethodDelete:
