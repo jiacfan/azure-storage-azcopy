@@ -55,26 +55,11 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 		listOrder.ExpectedTransferStatus = math.MaxUint8
 	}
 	// converted the list order command to json byte array
-	commandSerialized, err := json.Marshal(listOrder)
-	if err != nil {
-		panic(err)
-	}
+
 	url := "http://localhost:1337"
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		panic(err)
-	}
-	q := req.URL.Query()
-	// Type defines the type of GET request processed by the transfer engine
-	q.Add("Type", "list")
-	// command defines the actual list command serialized to byte array
-	q.Add("command", string(commandSerialized))
-	req.URL.RawQuery = q.Encode()
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
+	httpClient := common.NewHttpClient(url)
+
+	resp := httpClient.Send("list", listOrder)
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)

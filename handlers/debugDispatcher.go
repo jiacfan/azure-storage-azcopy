@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -17,21 +16,18 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 	//time.Sleep(time.Second * 2)
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
-		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
-		sendJobPartOrderToSTE(order)
+		sendJobPartOrderToSTE(jobPartOrder)
 	}
 }
 
-func sendJobPartOrderToSTE(payload []byte) {
+func sendJobPartOrderToSTE(payload *common.CopyJobPartOrder) {
 	url := "http://localhost:1337"
+	httpClient := common.NewHttpClient(url)
 
-	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payload))
-	if err != nil {
-		panic(err)
-	}
+	resp := httpClient.Send("copy", payload)
 
-	defer res.Body.Close()
-	_, err = ioutil.ReadAll(res.Body)
+	defer resp.Body.Close()
+	_, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
@@ -45,6 +41,7 @@ func fetchJobStatus(jobId string) string {
 	if err != nil {
 		panic(err)
 	}
+
 	lsCommand := common.ListJobPartsTransfers{JobId: jobId, ExpectedTransferStatus: math.MaxUint8}
 	lsCommandMarshalled, err := json.Marshal(lsCommand)
 	if err != nil {
