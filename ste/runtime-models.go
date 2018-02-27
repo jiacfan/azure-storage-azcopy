@@ -20,11 +20,11 @@ type TransferInfo struct {
 	NumberOfChunksDone uint32
 }
 
-func (t TransferInfo) getNumberOfChunksDone() uint32 {
+func (t *TransferInfo) getNumberOfChunksDone() uint32 {
 	return atomic.LoadUint32(&t.NumberOfChunksDone)
 }
 
-func (t TransferInfo) ChunksDone() uint32 {
+func (t *TransferInfo) ChunksDone() uint32 {
 	return atomic.AddUint32(&t.NumberOfChunksDone, 1)
 }
 
@@ -82,13 +82,11 @@ type CoordinatorChannels struct {
 }
 
 type EEChannels struct {
-	HighTransfer         <-chan TransferMsg
-	MedTransfer          <-chan TransferMsg
-	LowTransfer          <-chan TransferMsg
-	HighChunkTransaction chan ChunkMsg
-	MedChunkTransaction  chan ChunkMsg
-	LowChunkTransaction  chan ChunkMsg
-	SuicideChannel       <-chan SuicideJob
+	HighTransfer   <-chan TransferMsg
+	LowTransfer    <-chan TransferMsg
+	HighChunk      chan ChunkMsg
+	LowChunk       chan ChunkMsg
+	SuicideChannel <-chan SuicideJob
 }
 
 type SuicideJob byte
