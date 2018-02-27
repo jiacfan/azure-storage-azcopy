@@ -68,7 +68,6 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkCha
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
 	if blobSize <= chunkSize {
-		fmt.Println("PUT BLOB TRIGGERED for", transfer.Source)
 		localToBlockBlob.putBlob(transfer, blobUrl, memoryMappedFile)
 		return
 	}
