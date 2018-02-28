@@ -175,7 +175,7 @@ func (localToBlockBlob) generateUploadFunc(t TransferMsg, chunkId int32, totalNu
 
 				// fetching the blob http headers with content-type, content-encoding attributes
 				// fetching the metadata passed with the JobPartOrder
-				blobHttpHeader, metaData := t.blobHttpHeaderandMetaData(memoryMappedFile)
+				blobHttpHeader, metaData := t.blobHttpHeaderAndMetadata(memoryMappedFile)
 
 				putBlockListResponse, err := blockBlobUrl.PutBlockList(t.TransferContext, *blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 				if err != nil {
@@ -210,7 +210,7 @@ func (localToBlockBlob localToBlockBlob) putBlob(t TransferMsg, blobURL azblob.B
 
 	// transform blobURL and perform put blob operation
 	blockBlobUrl := blobURL.ToBlockBlobURL()
-	blobHttpHeader, metaData := t.blobHttpHeaderandMetaData(memoryMappedFile)
+	blobHttpHeader, metaData := t.blobHttpHeaderAndMetadata(memoryMappedFile)
 	body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile), pc)
 	putBlobResp, err := blockBlobUrl.PutBlob(t.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 

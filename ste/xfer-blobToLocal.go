@@ -151,7 +151,7 @@ func (blobToLocal) generateDownloadFunc(transfer TransferMsg, chunkId int32, tot
 						fmt.Sprintf(" has worker %v which failed to conclude Transfer after processing chunkId %v", workerId, chunkId))
 				}
 
-				lastModifiedTime, preserveLastModifiedTime := transfer.ifPreserveLastModifiedTime()
+				lastModifiedTime, preserveLastModifiedTime := transfer.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
 					err := os.Chtimes(transfer.Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
