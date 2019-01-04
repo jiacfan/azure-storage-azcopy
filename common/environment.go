@@ -62,3 +62,25 @@ func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
 func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
 }
+
+func (EnvironmentVariable) AWSAccessKeyID() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AWS_ACCESS_KEY_ID"}
+}
+
+func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AWS_SECRET_ACCESS_KEY"}
+}
+
+func (EnvironmentVariable) AWSRegion() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AWS_REGION"}
+}
+
+// OAuthTokenInfo is only used for internal integration.
+func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AZCOPY_OAUTH_TOKEN_INFO"}
+}
+
+// CredentialType is only used for internal integration.
+func (EnvironmentVariable) CredentialType() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
+}
