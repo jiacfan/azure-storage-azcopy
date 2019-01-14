@@ -52,6 +52,9 @@ func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason("BodyReR
 func (WaitReason) WriterChannel() WaitReason        { return WaitReason("Writer") }             // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk
 func (WaitReason) PriorChunk() WaitReason           { return WaitReason("Prior") }              // waiting on a prior chunk to arrive (before this one can be saved)
 
+// extra status used only by S2S copy
+func (WaitReason) CopyOnWire() WaitReason { return WaitReason("CopyOnWire") } // waiting for the copy on wire get finished
+
 func (wr WaitReason) String() string {
 	return string(wr) // avoiding reflection here, for speed, since will be called a lot
 }
