@@ -59,7 +59,7 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	// compute num chunks
-	numChunks := getNumUploadChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize)
 
 	// make sure URL is parsable
 	destURL, err := url.Parse(destination)
@@ -89,7 +89,7 @@ func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
+func (u *azureFilesUploader) Prologue(state PrologueState) {
 	jptm := u.jptm
 	info := jptm.Info()
 
@@ -101,7 +101,7 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 	}
 
 	// Create Azure file with the source size
-	fileHTTPHeaders, metaData := jptm.FileDstData(leadingBytes)
+	fileHTTPHeaders, metaData := jptm.FileDstData(state.leadingBytes)
 	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
@@ -111,7 +111,7 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	return createUploadChunkFunc(u.jptm, id, func() {
+	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
 		if jptm.Info().SourceSize == 0 {
