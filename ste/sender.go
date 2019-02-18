@@ -59,11 +59,11 @@ type PrologueState struct {
 	leadingBytes []byte
 }
 
-func(ps PrologueState) CanInferContentType() bool {
-	return len(ps.leadingBytes) > 0  // we can have a go, if we have some leading bytes
+func (ps PrologueState) CanInferContentType() bool {
+	return len(ps.leadingBytes) > 0 // we can have a go, if we have some leading bytes
 }
 
-func(ps PrologueState) GetInferredContentType(jptm IJobPartTransferMgr) string {
+func (ps PrologueState) GetInferredContentType(jptm IJobPartTransferMgr) string {
 	headers, _ := jptm.BlobDstData(ps.leadingBytes)
 	return headers.ContentType
 	// TODO: this BlobDstData method is messy, both because of the blob/file distinction and
@@ -95,38 +95,6 @@ type uploader interface {
 }
 
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error)
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-// Abstraction of sender logger
-/////////////////////////////////////////////////////////////////////////////////////////////////
-type ISenderLogger interface {
-	FailActiveSend(where string, err error)
-	FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus)
-}
-
-type s2sCopierLogger struct {
-	jptm IJobPartTransferMgr
-}
-
-func (l *s2sCopierLogger) FailActiveSend(where string, err error) {
-	l.jptm.FailActiveS2SCopy(where, err)
-}
-
-func (l *s2sCopierLogger) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	l.jptm.FailActiveS2SCopyWithStatus(where, err, failureStatus)
-}
-
-type uploaderLogger struct {
-	jptm IJobPartTransferMgr
-}
-
-func (l *uploaderLogger) FailActiveSend(where string, err error) {
-	l.jptm.FailActiveUpload(where, err)
-}
-
-func (l *uploaderLogger) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	l.jptm.FailActiveUploadWithStatus(where, err, failureStatus)
-}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
