@@ -29,7 +29,7 @@ import (
 )
 
 // general-purpose local to "any remote persistence location"
-func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory) {
+func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory, spif sourceInfoProviderFactory) {
 
 	info := jptm.Info()
 	fileSize := info.SourceSize
@@ -41,7 +41,7 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 2a. Create uploader
-	ul, err := uf(jptm, info.Destination, p, pacer)
+	ul, err := uf(jptm, info.Destination, p, pacer, spif(jptm))
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
