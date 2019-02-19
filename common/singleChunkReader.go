@@ -107,7 +107,7 @@ type singleChunkReader struct {
 
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
 	if length <= 0 {
-		return NewEmptyChunkReader()
+		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
 		ctx:           ctx,

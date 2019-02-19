@@ -127,6 +127,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 	// To take advantage of the good sequential read performance provided by many file systems,
 	// we work sequentially through the file here.
 	var chunkReader common.SingleChunkReader
+	ps := common.PrologueState{}
 	chunkIDCount := int32(0)
 	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
 
@@ -141,18 +142,15 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 		if srcInfoProvider.IsLocal() {
 			// create reader and prefetch the data into it
 			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-		} else {
-			// the data is remote, so there's nothing to read locally
-			chunkReader = common.NewEmptyChunkReader()
+			// Get prologue state here here for cases where bytes from the start of the file are used.
+			ps = chunkReader.GetPrologueState()
 		}
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
 			// Run prologue before first chunk is scheduled.
-			// We do this here for cases where bytes from the start of the file are used.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
-			ps := chunkReader.GetPrologueState()
 			s.Prologue(ps)
 		}
 
