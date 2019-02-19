@@ -28,11 +28,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// general-purpose local to "any remote persistence location"
-func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory, spif sourceInfoProviderFactory) {
+// anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
+func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	info := jptm.Info()
-	fileSize := info.SourceSize
+	srcSize := info.SourceSize
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
@@ -40,17 +40,24 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		return
 	}
 
-	// step 2a. Create uploader
-	ul, err := uf(jptm, info.Destination, p, pacer, spif(jptm))
+	// step 2a. Create sender
+	srcInfoProvider, err := sipf(jptm)
 	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, err.Error(), 0)
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	// step 2b. Read chunk size and count from the uploader (since it may have applied its own defaults and/or calculations to produce these values
-	chunkSize := ul.ChunkSize()
-	numChunks := ul.NumChunks()
+	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	if err != nil {
+		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
+	chunkSize := s.ChunkSize()
+	numChunks := s.NumChunks()
 	if jptm.ShouldLog(pipeline.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", chunkSize))
 	}
@@ -63,34 +70,37 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// then check the file exists at the remote location
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
-		exists, existenceErr := ul.RemoteFileExists()
+		exists, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
-			jptm.LogUploadError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
+			jptm.LogSendError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a FileAlreadyExists, in this case
 			jptm.ReportTransferDone()
 			return
 		}
 		if exists {
-			jptm.LogUploadError(info.Source, info.Destination, "File already exists", 0)
+			jptm.LogSendError(info.Source, info.Destination, "File already exists", 0)
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to always use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
 			jptm.ReportTransferDone()
 			return
 		}
 	}
 
-	// step 4: Open the Source File.
-	// Declare factory func, because we need it later too
-	sourceFileFactory := func() (common.CloseableReaderAt, error) {
-		return os.Open(info.Source)
+	// step 4: Open the local Source File (if any)
+	sourceFileFactory := func() (common.CloseableReaderAt, error) {}
+	srcFile := (*os.File)(nil)
+	if srcInfoProvider.IsLocal() {
+		sourceFileFactory = func() (common.CloseableReaderAt, error) {
+			return os.Open(info.Source)
+		}
+		srcFile, err := sourceFileFactory()
+		if err != nil {
+			jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 	}
-	srcFile, err := sourceFileFactory()
-	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.ReportTransferDone()
-		return
-	}
-	defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 
 	// *****
 	// Error-handling rules change here.
@@ -98,22 +108,17 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// BELOW this point, this routine always schedules the expected number
 	// of chunks, even if it has seen a failure, and the
 	// workers (the chunkfunc implementations) must use
-	// jptm.FailActiveUpload when there's an error)
+	// jptm.FailActiveSend when there's an error)
+	// TODO: are we comfortable with this approach?
+	//   DECISION: 16 Jan, 2019: for now, we are leaving in place the above rule than number of of completed chunks must
+	//   eventually reach numChunks, since we have no better short-term alternative.
 	// ******
 
 	// step 5: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, ul) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s) })
 
-	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
-	//     which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
-	//     ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
-	//     ...so that the last of them will trigger the epilogue.
-	//     ...Question: is that OK? (Same question as we have for downloads)
-	// DECISION: 16 Jan, 2019: for now, we are leaving in place the above rule than number of of completed chunks must
-	// eventually reach numChunks, since we have no better short-term alternative.
-
-	// Step 5: Go through the file and schedule chunk messages to upload each chunk
+	// Step 6: Go through the file and schedule chunk messages to upload each chunk
 	// As we do this, we force preload of each chunk to memory, and we wait (block)
 	// here if the amount of preloaded data gets excessive. That's OK to do,
 	// because if we already have that much data preloaded (and scheduled for sending in
@@ -121,53 +126,69 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// is harmless (and a good thing, to avoid excessive RAM usage).
 	// To take advantage of the good sequential read performance provided by many file systems,
 	// we work sequentially through the file here.
-	context := jptm.Context()
-	slicePool := jptm.SlicePool()
-	cacheLimiter := jptm.CacheLimiter()
-	chunkCount := int32(0)
-	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex, fileSize); startIndex += int64(chunkSize) {
+	var chunkReader common.SingleChunkReader
+	chunkIDCount := int32(0)
+	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
 		adjustedChunkSize := int64(chunkSize)
 
 		// compute actual size of the chunk
-		if startIndex+int64(chunkSize) > fileSize {
-			adjustedChunkSize = fileSize - startIndex
+		if startIndex+int64(chunkSize) > srcSize {
+			adjustedChunkSize = srcSize - startIndex
 		}
 
-		// Make reader for this chunk.
-		// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat its part
-		// of the file read later (when doing a retry)
-		// BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
-		// to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
-		chunkReader := common.NewSingleChunkReader(context, sourceFileFactory, id, adjustedChunkSize, jptm, slicePool, cacheLimiter)
-
-		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-		chunkReader.TryBlockingPrefetch(srcFile)
+		if srcInfoProvider.IsLocal() {
+			// create reader and prefetch the data into it
+			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+		} else {
+			// the data is remote, so there's nothing to read locally
+			chunkReader = common.NewEmptyChunkReader()
+		}
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
-			// Capture the leading bytes of the file for mime-type detection
-			// We do this here, to avoid needing any separate disk read elsewhere in the code (i.e. we just prefetched what we need for this, so use it)
-			leadingBytes := chunkReader.CaptureLeadingBytes()
-			// Run prologue before first chunk is scheduled
-			// There is deliberately no error return value from the Prologue.
-			// If it failed, the Prologue itself must call jptm.FailActiveUpload.
-			ul.Prologue(PrologueState{leadingBytes: leadingBytes})
+			// Run prologue before first chunk is scheduled.
+			// We do this here for cases where bytes from the start of the file are used.
+			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
+			// there's other initialization to do in the sender.
+			ps := chunkReader.GetPrologueState()
+			s.Prologue(ps)
 		}
 
 		// schedule the chunk job/msg
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 		isWholeFile := numChunks == 1
-		jptm.ScheduleChunks(ul.GenerateUploadFunc(id, chunkCount, chunkReader, isWholeFile))
+		if srcInfoProvider.IsLocal() {
+			jptm.ScheduleChunks(s.(uploader).GenerateUploadFunc(id, chunkIDCount, chunkReader, isWholeFile))
+		} else {
+			jptm.ScheduleChunks(s.(s2sCopier).GenerateCopyFunc(id, chunkIDCount, adjustedChunkSize, isWholeFile))
+		}
 
-		chunkCount += 1
+		chunkIDCount++
 	}
 
 	// sanity check to verify the number of chunks scheduled
-	if chunkCount != int32(numChunks) {
+	if chunkIDCount != int32(numChunks) {
 		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
+}
+
+// Make reader for this chunk.
+// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat its part
+// of the file read later (when doing a retry)
+// BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
+// to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
+func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, srcFile *os.File) common.SingleChunkReader {
+	chunkReader := common.NewSingleChunkReader(jptm.Context(),
+		sourceFileFactory,
+		id,
+		adjustedChunkSize,
+		jptm, jptm.SlicePool(),
+		jptm.CacheLimiter())
+
+	// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
+	chunkReader.TryBlockingPrefetch(srcFile)
 }
 
 func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {

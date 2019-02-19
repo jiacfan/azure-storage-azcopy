@@ -42,7 +42,7 @@ type azureFilesUploader struct {
 	pacer     *pacer
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 

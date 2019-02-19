@@ -29,6 +29,10 @@ import (
 type emptyChunkReader struct {
 }
 
+func NewEmptyChunkReader() SingleChunkReader {
+	return &emptyChunkReader{}
+}
+
 func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
 	return true
 }
@@ -48,8 +52,8 @@ func (cr *emptyChunkReader) Close() error {
 	return nil
 }
 
-func (cr *emptyChunkReader) CaptureLeadingBytes() []byte {
-	return nil // we can't sniff the mime type
+func (cr *emptyChunkReader) GetPrologueState() PrologueState {
+	return PrologueState{}
 }
 
 func (cr *emptyChunkReader) HasPrefetchedEntirelyZeros() bool {

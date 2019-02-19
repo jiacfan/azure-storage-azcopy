@@ -48,9 +48,11 @@ type SingleChunkReader interface {
 	// any subsequent Read will just retry the same read as we do here, and if it fails at that time then Read will return an error.
 	TryBlockingPrefetch(fileReader io.ReaderAt) bool
 
-	// CaptureLeadingBytes is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
+	// GetPrologueState is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
 	// on the first chunk in each file (since there's no point in calling it on others)
-	CaptureLeadingBytes() []byte
+	// There is deliberately no error return value from the Prologue.
+	// If it failed, the Prologue itself must call jptm.FailActiveSend.
+	GetPrologueState() PrologueState
 
 	// Length is the number of bytes in the chunk
 	Length() int64
@@ -105,7 +107,7 @@ type singleChunkReader struct {
 
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
 	if length <= 0 {
-		return &emptyChunkReader{}
+		return NewEmptyChunkReader()
 	}
 	return &singleChunkReader{
 		ctx:           ctx,
@@ -292,18 +294,21 @@ func (cr *singleChunkReader) Close() error {
 // Grab the leading bytes, for later MIME type recognition
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
-func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
+func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
 	if err != nil && err != io.EOF {
-		return nil // we just can't sniff the mime type
+		return PrologueState{} // empty return value, because we just can't sniff the mime type
 	}
 	if n < len(leadingBytes) {
 		// truncate if we read less than expected (very small file, so err was EOF above)
 		leadingBytes = leadingBytes[:n]
 	}
 	// MUST re-wind, so that the bytes we read will get transferred too!
-	cr.Seek(0, io.SeekStart)
-	return leadingBytes
+	_, err = cr.Seek(0, io.SeekStart)
+	if err != nil {
+		panic("can't seek after reading leading bytes")
+	}
+	return PrologueState{leadingBytes}
 }
