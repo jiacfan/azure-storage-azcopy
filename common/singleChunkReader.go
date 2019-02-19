@@ -310,5 +310,5 @@ func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	if err != nil {
 		panic("can't seek after reading leading bytes")
 	}
-	return PrologueState{leadingBytes}
+	return PrologueState{LeadingBytes: leadingBytes}
 }

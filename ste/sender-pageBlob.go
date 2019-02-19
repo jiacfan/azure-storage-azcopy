@@ -46,7 +46,7 @@ type pageBlobSenderBase struct {
 	destBlobTier    azblob.AccessTierType
 }
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider sourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -106,7 +106,7 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
-func (s *pageBlobSenderBase) Prologue(ps PrologueState) {
+func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
